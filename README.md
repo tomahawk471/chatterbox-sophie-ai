@@ -1,4 +1,4 @@
-# Sophie AI
+# Chatterbox Sophie AI
 
 A local, real-time voice-to-voice companion. You talk, Sophie listens, thinks with a local LLM, and answers out loud in a cloned voice using [Chatterbox TTS](https://github.com/resemble-ai/chatterbox). It's hands-free and full-duplex: you can interrupt her mid-sentence like a real conversation.
 
@@ -22,13 +22,13 @@ Everything runs on your own machine. No audio or text leaves it (apart from opti
 | GPU | NVIDIA. About 4 GB VRAM for Chatterbox, plus whatever your LLM needs (an 8B model at Q4 is about 6 GB) |
 | Python | **3.12**. Newer versions (3.13+) can't install Chatterbox's pinned dependencies |
 | Browser | Chrome or Chromium |
-| LLM | Any OpenAI-compatible chat server: llama.cpp, Ollama, LM Studio, vLLM... |
+| LLM | Any OpenAI-compatible chat server. Recommended: llama.cpp + Dolphin 3.0 Llama 3.1 8B (see [LLM_SETUP.md](LLM_SETUP.md)) |
 
 ## Install
 
 ```bash
-git clone <this repository> sophie-ai
-cd sophie-ai
+git clone https://github.com/tomahawk471/chatterbox-sophie-ai.git
+cd chatterbox-sophie-ai
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -48,22 +48,20 @@ This fetches about 20 seconds of the public-domain LJSpeech voice into `voice_re
 
 ### Start an LLM server
 
-**llama.cpp:**
+Sophie needs a local LLM server for her thinking. **See [LLM_SETUP.md](LLM_SETUP.md)** for full step-by-step instructions. The short version, with the recommended model ([Dolphin 3.0 Llama 3.1 8B abliterated](https://huggingface.co/mradermacher/Dolphin3.0-Llama3.1-8B-abliterated-GGUF), Q4_K_M: fast, and great at casual conversation):
+
 ```bash
-./build/bin/llama-server -m /path/to/your-model.gguf --port 8080 -c 8192 -ngl 99 --jinja
+# once: build llama.cpp with CUDA (see LLM_SETUP.md) and download the model
+mkdir -p ~/models
+wget -O ~/models/Dolphin3.0-Llama3.1-8B-abliterated.Q4_K_M.gguf \
+  "https://huggingface.co/mradermacher/Dolphin3.0-Llama3.1-8B-abliterated-GGUF/resolve/main/Dolphin3.0-Llama3.1-8B-abliterated.Q4_K_M.gguf"
+
+# every time, in its own terminal:
+~/llama.cpp/build/bin/llama-server -m ~/models/Dolphin3.0-Llama3.1-8B-abliterated.Q4_K_M.gguf \
+  --port 8080 -c 8192 -ngl 99 --jinja --reasoning off
 ```
-No config needed: the default is `http://localhost:8080/v1`.
 
-**Ollama:**
-```bash
-ollama pull llama3.1:8b
-export SOPHIE_LLM_URL=http://localhost:11434/v1
-export SOPHIE_LLM_MODEL=llama3.1:8b
-```
-
-**LM Studio:** start the local server, then set `SOPHIE_LLM_URL=http://localhost:1234/v1` and `SOPHIE_LLM_MODEL=<model name>`.
-
-Any 7-8B instruct model works well.
+Ollama and LM Studio work too (also covered in LLM_SETUP.md).
 
 ## Run
 

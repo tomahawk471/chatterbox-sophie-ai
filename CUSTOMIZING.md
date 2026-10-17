@@ -2,7 +2,7 @@
 
 Everything about who Sophie is and how she behaves lives in a few small, plain-text files. You don't need to know Python to change them: open the file, edit the text between the quotes, save, restart.
 
-Every command below can be copy-pasted into a terminal from inside the project folder (`cd sophie-ai` first). The "edit" commands open the file in a normal text editor window: type, then `Ctrl+S` to save. They use `gnome-text-editor` (Ubuntu's default). Swap in `gedit`, `kate`, `code` or any editor you like.
+Every command below can be copy-pasted into a terminal from inside the project folder (`cd chatterbox-sophie-ai` first). The "edit" commands open the file in a normal text editor window: type, then `Ctrl+S` to save. They use `gnome-text-editor` (Ubuntu's default). Swap in `gedit`, `kate`, `code` or any editor you like.
 
 To open the whole project folder in your file manager instead:
 
