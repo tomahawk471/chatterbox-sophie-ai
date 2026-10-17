@@ -1,0 +1,14 @@
+# Personal/runtime data — never commit
+history.json
+learned_profile.json
+seed_memory.json
+mood_state.json
+conversation_log.txt
+voice_ref/*
+!voice_ref/README.md
+
+__pycache__/
+*.pyc
+venv/
+.venv/
+audio_history/

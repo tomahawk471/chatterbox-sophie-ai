@@ -1,0 +1,14 @@
+Sophie AI
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This project depends on the following third-party work (none of it is
+redistributed here; it is installed or downloaded at runtime):
+
+- Chatterbox TTS by Resemble AI (MIT License), https://github.com/resemble-ai/chatterbox
+  Generated audio carries Resemble's Perth imperceptible watermark, as
+  Chatterbox applies by default.
+- Silero VAD (MIT), downloaded at runtime via torch.hub.
+- faster-whisper / OpenAI Whisper models (MIT), downloaded at runtime.
+- Wikipedia random-article summaries (CC BY-SA), fetched at runtime by idle.py.
+- Default voice: LJSpeech dataset (public domain), downloaded by
+  scripts/download_default_voice.py.

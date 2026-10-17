@@ -1,0 +1,15 @@
+# Tested with Python 3.12 on Linux + an NVIDIA GPU (CUDA).
+# chatterbox-tts pins its own torch/torchaudio/transformers versions.
+chatterbox-tts==0.1.7
+fastapi==0.141.1
+uvicorn==0.52.1
+websockets==11.0.3
+Jinja2==3.1.6
+openai==2.53.0
+faster-whisper==1.2.1
+numpy==1.26.4
+soundfile==0.14.0
+librosa==0.11.0
+# resemble-perth (Chatterbox's audio watermark) imports pkg_resources,
+# which setuptools removed in v81.
+setuptools<81

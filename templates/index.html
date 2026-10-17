@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sophie</title>
+    <style>
+        :root {
+            --bg: #05070d;
+            --accent: #4ad9ff;
+            --accent-soft: rgba(74, 217, 255, 0.55);
+            --accent-think: #b98bff;
+            --accent-think-soft: rgba(185, 139, 255, 0.55);
+            --level: 0;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            height: 100%;
+        }
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background:
+                radial-gradient(ellipse at 50% 35%, #0d1526 0%, #05070d 60%, #030408 100%);
+            color: #cfe6f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .stage {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+        }
+
+        .orb-wrap {
+            position: relative;
+            width: 240px;
+            height: 240px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid var(--accent-soft);
+            opacity: 0.35;
+            pointer-events: none;
+        }
+        .ring--1 { width: 100%; height: 100%; animation: spin 18s linear infinite; }
+        .ring--2 { width: 122%; height: 122%; animation: spin 26s linear infinite reverse; opacity: 0.2; }
+
+        .orb {
+            position: relative;
+            width: 62%;
+            height: 62%;
+            border-radius: 50%;
+            cursor: pointer;
+            background: radial-gradient(circle at 35% 30%,
+                rgba(255, 255, 255, 0.95) 0%,
+                var(--accent) 35%,
+                rgba(10, 20, 40, 0.15) 75%);
+            box-shadow:
+                0 0 calc(30px + 60px * var(--level)) var(--accent-soft),
+                0 0 calc(70px + 120px * var(--level)) var(--accent-soft);
+            transform: scale(calc(1 + var(--level) * 0.12));
+            transition: box-shadow 0.08s linear, transform 0.08s linear, background 0.6s ease;
+            animation: idle-breathe 4.5s ease-in-out infinite;
+        }
+
+        .orb.thinking {
+            background: radial-gradient(circle at 35% 30%,
+                rgba(255, 255, 255, 0.95) 0%,
+                var(--accent-think) 35%,
+                rgba(20, 10, 40, 0.15) 75%);
+            box-shadow:
+                0 0 40px var(--accent-think-soft),
+                0 0 90px var(--accent-think-soft);
+            animation: think-pulse 1s ease-in-out infinite;
+        }
+
+        .orb.speaking {
+            animation: none;
+        }
+
+        .orb.listening {
+            animation: none;
+        }
+
+        @keyframes idle-breathe {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.15); }
+        }
+        @keyframes think-pulse {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .status {
+            font-size: 0.72rem;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: var(--accent);
+            opacity: 0.65;
+            min-height: 1em;
+            user-select: none;
+        }
+
+        .hint {
+            font-size: 0.8rem;
+            color: #6f8aa3;
+            opacity: 0.8;
+        }
+
+        .type-row {
+            position: fixed;
+            bottom: 26px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(420px, 86vw);
+        }
+        .type-row input[type="text"] {
+            width: 100%;
+            padding: 12px 18px;
+            border-radius: 24px;
+            border: 1px solid rgba(74, 217, 255, 0.25);
+            background: rgba(13, 21, 38, 0.6);
+            color: #cfe6f5;
+            font-size: 0.95rem;
+            outline: none;
+            backdrop-filter: blur(6px);
+        }
+        .type-row input[type="text"]::placeholder {
+            color: #4d6478;
+        }
+        .type-row input[type="text"]:focus {
+            border-color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <div class="stage">
+        <div class="orb-wrap">
+            <div class="ring ring--1"></div>
+            <div class="ring ring--2"></div>
+            <div class="orb" id="orb"></div>
+        </div>
+        <div class="status" id="status">tap to listen</div>
+    </div>
+
+    <div class="type-row">
+        <form id="chatForm">
+            <input type="text" id="messageInput" placeholder="...or type instead" autocomplete="off">
+        </form>
+    </div>
+
+    <script>
+        // ============================================================
+        // Audio playback: Web Audio API, chunks scheduled back-to-back
+        // as they arrive. All playback routes through a shared analyser
+        // so the orb can react to Sophie's actual voice level.
+        // ============================================================
+        let audioCtx = null;
+        let nextStartTime = 0;
+        let currentSampleRate = 24000;
+        let activeSources = [];
+        let playbackAnalyser = null;
+        let playbackGain = null;
+
+        function ensureAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                playbackGain = audioCtx.createGain();
+                playbackAnalyser = audioCtx.createAnalyser();
+                playbackAnalyser.fftSize = 256;
+                playbackGain.connect(playbackAnalyser);
+                playbackAnalyser.connect(audioCtx.destination);
+
+                // iOS Safari suspends the AudioContext whenever the tab/app
+                // loses focus (screen lock, app switch, incoming call) and
+                // won't resume it on its own — without this, listening/
+                // speaking can silently stop working after backgrounding.
+                document.addEventListener("visibilitychange", () => {
+                    if (document.visibilityState === "visible" && audioCtx && audioCtx.state === "suspended") {
+                        audioCtx.resume();
+                    }
+                });
+            }
+            if (audioCtx.state === "suspended") {
+                audioCtx.resume();
+            }
+        }
+
+        function playChunk(arrayBuffer) {
+            const floatData = new Float32Array(arrayBuffer);
+            const buffer = audioCtx.createBuffer(1, floatData.length, currentSampleRate);
+            buffer.copyToChannel(floatData, 0);
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(playbackGain);
+            source.onended = () => {
+                activeSources = activeSources.filter((s) => s !== source);
+            };
+
+            const now = audioCtx.currentTime;
+            if (nextStartTime < now) {
+                nextStartTime = now + 0.02;
+            }
+            source.start(nextStartTime);
+            nextStartTime += buffer.duration;
+            activeSources.push(source);
+        }
+
+        function stopAllPlayback() {
+            activeSources.forEach((s) => {
+                try { s.stop(); } catch (e) {}
+            });
+            activeSources = [];
+            nextStartTime = audioCtx.currentTime;
+        }
+
+        // ============================================================
+        // Mic capture: continuous raw PCM streamed to the server, which
+        // runs VAD + faster-whisper on it. A parallel analyser drives the
+        // orb's reactivity while listening.
+        // ============================================================
+        let micStream = null;
+        let micSource = null;
+        let micProcessor = null;
+        let micAnalyser = null;
+        let silentGain = null;
+        let listening = false;
+
+        async function startListening() {
+            if (listening) return;
+            ensureAudioContext();
+
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
+                });
+            } catch (e) {
+                alert("Couldn't access the microphone: " + e.message);
+                return;
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "mic_start", sample_rate: audioCtx.sampleRate }));
+            }
+
+            micSource = audioCtx.createMediaStreamSource(micStream);
+            micAnalyser = audioCtx.createAnalyser();
+            micAnalyser.fftSize = 256;
+            micSource.connect(micAnalyser);
+
+            micProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+            micProcessor.onaudioprocess = (e) => {
+                if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                const input = e.inputBuffer.getChannelData(0);
+                const copy = new Float32Array(input); // inputBuffer's array is reused, must copy
+                ws.send(copy.buffer);
+            };
+
+            // ScriptProcessorNode only fires onaudioprocess while connected
+            // through to a destination in some browsers — route through a
+            // silent gain node so the raw mic input is never actually
+            // audible (no feedback loop).
+            silentGain = audioCtx.createGain();
+            silentGain.gain.value = 0;
+            micSource.connect(micProcessor);
+            micProcessor.connect(silentGain);
+            silentGain.connect(audioCtx.destination);
+
+            listening = true;
+            setState("listening");
+        }
+
+        function stopListening() {
+            if (!listening) return;
+            if (micProcessor) {
+                micProcessor.disconnect();
+                micProcessor.onaudioprocess = null;
+            }
+            if (micAnalyser) micAnalyser.disconnect();
+            if (silentGain) silentGain.disconnect();
+            if (micSource) micSource.disconnect();
+            if (micStream) micStream.getTracks().forEach((t) => t.stop());
+            listening = false;
+            setState("idle");
+        }
+
+        document.getElementById("orb").addEventListener("click", () => {
+            if (listening) stopListening(); else startListening();
+        });
+
+        // ============================================================
+        // Visual state machine: idle / listening / thinking / speaking.
+        // Drives the orb's CSS class + status caption, and which
+        // analyser (mic or playback) feeds its reactive glow.
+        // ============================================================
+        const orb = document.getElementById("orb");
+        const statusEl = document.getElementById("status");
+        let currentState = "idle";
+
+        const STATUS_LABELS = {
+            idle: "tap to listen",
+            listening: "listening",
+            thinking: "thinking",
+            speaking: "speaking",
+        };
+
+        function setState(state) {
+            currentState = state;
+            orb.classList.remove("listening", "thinking", "speaking");
+            if (state !== "idle") orb.classList.add(state);
+            statusEl.textContent = STATUS_LABELS[state] || "";
+        }
+
+        function animateLevel() {
+            let analyser = null;
+            if (currentState === "speaking" && playbackAnalyser) {
+                analyser = playbackAnalyser;
+            } else if (currentState === "listening" && micAnalyser) {
+                analyser = micAnalyser;
+            }
+
+            if (analyser) {
+                const data = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(data);
+                let sum = 0;
+                for (let i = 0; i < data.length; i++) sum += data[i];
+                const avg = sum / data.length / 255; // 0..1
+                document.documentElement.style.setProperty("--level", Math.min(1, avg * 2.2).toFixed(3));
+            } else {
+                document.documentElement.style.setProperty("--level", 0);
+            }
+            requestAnimationFrame(animateLevel);
+        }
+        requestAnimationFrame(animateLevel);
+
+        // ============================================================
+        // Websocket
+        // ============================================================
+        let ws = null;
+
+        const WS_TOKEN = "{{ ws_token }}";
+
+        function connectWS() {
+            const proto = location.protocol === "https:" ? "wss://" : "ws://";
+            ws = new WebSocket(proto + location.host + "/ws/chat?token=" + encodeURIComponent(WS_TOKEN));
+            ws.binaryType = "arraybuffer";
+
+            ws.onopen = () => {
+                if (listening && audioCtx) {
+                    ws.send(JSON.stringify({ type: "mic_start", sample_rate: audioCtx.sampleRate }));
+                }
+            };
+
+            ws.onmessage = (event) => {
+                if (typeof event.data === "string") {
+                    const msg = JSON.parse(event.data);
+
+                    if (msg.type === "reply_text") {
+                        if (msg.role === "user") {
+                            // voice transcript came back — she's composing a reply now
+                            setState("thinking");
+                        }
+                        // assistant text: no transcript shown, just wait for audio
+                    } else if (msg.type === "stream_start") {
+                        stopAllPlayback();
+                        currentSampleRate = msg.sample_rate;
+                        nextStartTime = audioCtx.currentTime + 0.1;
+                        setState("speaking");
+                    } else if (msg.type === "stream_end") {
+                        setState(listening ? "listening" : "idle");
+                    } else if (msg.type === "interrupt") {
+                        stopAllPlayback();
+                        setState(listening ? "listening" : "idle");
+                    }
+                    // no_checkin: nothing to do
+                } else {
+                    playChunk(event.data);
+                }
+            };
+
+            ws.onclose = () => {
+                setTimeout(connectWS, 1000);
+            };
+        }
+
+        // ============================================================
+        // Idle checkin: ask the server every POLL_INTERVAL_MS whether
+        // Sophie wants to bring something up on her own (see
+        // IDLE_THRESHOLD_SECONDS / RESPONSE_TIMEOUT_SECONDS in config.py).
+        // ============================================================
+        const POLL_INTERVAL_MS = 15000;
+        let idleTimer;
+
+        function resetIdleTimer() {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ensureAudioContext();
+                    ws.send(JSON.stringify({ type: "idle_checkin" }));
+                }
+                resetIdleTimer();
+            }, POLL_INTERVAL_MS);
+        }
+
+        document.getElementById("chatForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            ensureAudioContext();
+
+            const input = document.getElementById("messageInput");
+            const text = input.value.trim();
+            if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+            ws.send(JSON.stringify({ type: "message", text: text }));
+            input.value = "";
+            setState("thinking");
+            resetIdleTimer();
+        });
+
+        connectWS();
+        resetIdleTimer();
+    </script>
+</body>
+</html>
